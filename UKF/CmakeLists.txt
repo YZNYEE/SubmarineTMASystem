@@ -1,4 +1,11 @@
 add_library(UKF UKF.cpp UKF.hpp)
 target_include_directories(UKF PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Include Eigen headers
+set(3RD_HEADER "${TMA_3RD_PARTY_DIR}/ceres_part/include")
+target_include_directories(UKF PUBLIC 
+    "${3RD_HEADER}/eigen-3.4.0"
+)
+
 # 链接 COMMON 库，使得 UKF 可以使用其中的 Constant.hpp
 target_link_libraries(UKF PUBLIC COMMON)

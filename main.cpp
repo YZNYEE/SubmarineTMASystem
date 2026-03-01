@@ -7,6 +7,7 @@
 #include "MLE/MLE.hpp"
 #include "PF/PF.hpp"
 #include "EKELUND/EKELUND.hpp"
+#include "UKF/UKF.hpp"
 #include "COMMON/DataStruct.hpp"
 #include "PreProcess/DataManager.hpp" // 引入 DataManager
 
@@ -363,9 +364,110 @@ void test_EKELUND() {
     }
 }
 
+void test_UKF() {
+    std::cout << "\n=======================================" << std::endl;
+    std::cout << "Starting TMA UKF Test..." << std::endl;
+    std::cout << "=======================================" << std::endl;
+
+    // 1. Ground Truth
+    TargetState true_target;
+    true_target.x = 5000.0;
+    true_target.y = 8000.0;
+    true_target.vx = -10.0;
+    true_target.vy = -5.0;
+
+    std::cout << "True Target: Pos(" << true_target.x << ", " << true_target.y << ") Vel(" << true_target.vx << ", " << true_target.vy << ")" << std::endl;
+
+    // 2. Initialize UKF
+    UKF ukf;
+    TargetState init_state;
+    // Initial guess with some error
+    init_state.x = 6000.0; 
+    init_state.y = 7000.0;
+    init_state.vx = 0.0;
+    init_state.vy = 0.0;
+
+    Eigen::Matrix4d init_P = Eigen::Matrix4d::Identity();
+    init_P(0, 0) = 2000.0 * 2000.0; // Position variance
+    init_P(1, 1) = 2000.0 * 2000.0;
+    init_P(2, 2) = 50.0 * 50.0;     // Velocity variance
+    init_P(3, 3) = 50.0 * 50.0;
+
+    double std_a = 0.05; // Process noise (acceleration)
+    double std_rad = 0.5 * M_PI / 180.0; // Measurement noise (0.5 deg)
+
+    ukf.init(init_state, init_P, std_a, std_rad);
+
+    std::cout << "UKF Initialized. Initial Guess: Pos(" << init_state.x << ", " << init_state.y << ")" << std::endl;
+
+    // 3. Simulation Loop
+    double obs_x = 0.0, obs_y = 0.0;
+    double obs_vx = 10.0, obs_vy = 0.0;
+    
+    std::default_random_engine gen;
+    std::normal_distribution<double> noise(0.0, std_rad);
+
+    int steps = 1200;
+    double dt = 1.0;
+    
+    for (int i = 0; i <= steps; ++i) {
+        double t = i * dt;
+
+        // Observer Motion
+        if (i == 600) {
+            // Maneuver
+            obs_vx = 0.0;
+            obs_vy = 10.0;
+            std::cout << "[Maneuver] Observer turns North at t=" << t << "s" << std::endl;
+        }
+
+        // True Target State
+        double tx = true_target.x + true_target.vx * t;
+        double ty = true_target.y + true_target.vy * t;
+        double tvx = true_target.vx;
+        double tvy = true_target.vy;
+
+        // Observer Position update
+        if (i > 0) {
+            obs_x += obs_vx * dt;
+            obs_y += obs_vy * dt;
+        }
+        
+        // Generate Measurement
+        double true_bearing = std::atan2(tx - obs_x, ty - obs_y);
+        double meas_bearing = NormalizeAngle(true_bearing + noise(gen));
+
+        ObsData obs;
+        obs.timetamp = (int)t;
+        obs.x = obs_x;
+        obs.y = obs_y;
+        obs.bearing = meas_bearing;
+        obs.brgvalid = true;
+
+        // UKF Update
+        ukf.update(obs);
+
+        // Print status every 100 steps
+        if (i % 100 == 0 || i == steps) {
+            TargetState est = ukf.getResult();
+            double pos_err = std::sqrt(std::pow(est.x - tx, 2) + std::pow(est.y - ty, 2));
+            double vel_err = std::sqrt(std::pow(est.vx - tvx, 2) + std::pow(est.vy - tvy, 2));
+            
+            std::cout << "t=" << std::setw(4) << t << "s | "
+                      << "Est Pos: (" << std::fixed << std::setprecision(1) << est.x << ", " << est.y << ") "
+                      << "Err: " << std::setw(7) << pos_err << "m | "
+                      << "Est Vel: (" << est.vx << ", " << est.vy << ") "
+                      << "Err: " << std::setw(6) << vel_err << "m/s" << std::endl;
+        }
+    }
+}
+
 int main() {
     // 运行 Ekelund 测试
-    test_EKELUND();
+    // test_EKELUND();
+
+    // 运行 UKF 测试
+    test_UKF();
 
     // 运行 MLE 测试
     // test_MLE(); 
