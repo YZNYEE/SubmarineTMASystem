@@ -1,0 +1,4 @@
+add_library(UKF UKF.cpp UKF.hpp)
+target_include_directories(UKF PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+# 链接 COMMON 库，使得 UKF 可以使用其中的 Constant.hpp
+target_link_libraries(UKF PUBLIC COMMON)

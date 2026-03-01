@@ -1,0 +1,4 @@
+add_library(MLE MLE.cpp MLE.hpp)
+target_include_directories(MLE PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+# 链接 COMMON 库，使得 MLE 可以使用其中的 Constant.hpp
+target_link_libraries(MLE PUBLIC COMMON)

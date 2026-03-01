@@ -1,0 +1,28 @@
+# 忽略第三方库目录
+3rdparty/
+
+# 忽略构建目录
+build/
+out/
+bin/
+
+# 忽略 IDE 配置文件
+.vscode/
+.idea/
+*.suo
+*.user
+*.sln
+
+# 忽略编译生成的文件
+*.obj
+*.exe
+*.dll
+*.lib
+*.a
+*.pdb
+
+# 忽略 CMake 生成的文件
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile

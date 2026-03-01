@@ -1,0 +1,7 @@
+# 定义 EKELUND 库，包含源文件和头文件
+add_library(EKELUND EKELUND.cpp EKELUND.hpp)
+
+# 设置包含目录，PUBLIC 使得链接此库的目标也能找到头文件
+target_include_directories(EKELUND PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+# 链接 COMMON 库，使得 EKELUND 可以使用其中的 Constant.hpp
+target_link_libraries(EKELUND PUBLIC COMMON)

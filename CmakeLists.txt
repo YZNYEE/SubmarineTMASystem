@@ -1,0 +1,28 @@
+cmake_minimum_required(VERSION 3.10)
+project(TMA)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+
+# 设置全局变量，所有子项目均可引用
+# 例如：在子项目中可以使用 ${TMA_ROOT_DIR} 获取项目根路径
+set(TMA_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+
+# 设置第三方库的根目录，默认为项目根目录下的 3rdparty 文件夹
+# 用户可以在命令行通过 -DTMA_3RD_PARTY_DIR=/path/to/libs 修改此路径
+set(TMA_3RD_PARTY_DIR "${CMAKE_SOURCE_DIR}/3rdparty" CACHE PATH "Path to 3rd party libraries")
+
+# 添加子项目目录
+# 建议将基础库 COMMON 放在最前面，以便其他子项目可以查找依赖
+add_subdirectory(COMMON)
+add_subdirectory(EKELUND)
+add_subdirectory(MLE)
+add_subdirectory(PF)
+add_subdirectory(UKF)
+
+# 创建可执行文件
+add_executable(TMA main.cpp)
+
+# 将子项目的库链接到主程序
+# 注意：UKF 目前作为 INTERFACE 库链接，因为没有源文件
+target_link_libraries(TMA PRIVATE EKELUND MLE PF UKF)

@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.10)
+project(COMMON)
+
+# 定义接口库 (Header-Only Library)
+add_library(COMMON INTERFACE)
+
+# 指定头文件包含路径，使得链接此库的目标可以直接 #include "Constant.hpp"
+target_include_directories(COMMON INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})

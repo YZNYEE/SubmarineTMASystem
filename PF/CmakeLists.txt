@@ -1,0 +1,4 @@
+add_library(PF PF.cpp PF.hpp)
+target_include_directories(PF PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+# 链接 COMMON 库，使得 PF 可以使用其中的 Constant.hpp
+target_link_libraries(PF PUBLIC COMMON)
