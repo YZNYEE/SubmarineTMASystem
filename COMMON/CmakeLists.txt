@@ -6,3 +6,19 @@ add_library(COMMON INTERFACE)
 
 # 指定头文件包含路径，使得链接此库的目标可以直接 #include "Constant.hpp"
 target_include_directories(COMMON INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# 显式添加头文件以便 IDE (如 VS) 能够显示
+# 对于 INTERFACE 库，target_sources 需要 CMake 3.11+ 才能支持 PUBLIC/INTERFACE 之外的 PRIVATE 语义
+# 或者直接使用 target_sources(COMMON INTERFACE ...)
+target_sources(COMMON INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/Constant.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/DataStruct.hpp"
+)
+
+# 显式添加头文件以便 IDE (如 VS) 能够显示
+# 对于 INTERFACE 库，target_sources 需要 CMake 3.11+ 才能支持 PUBLIC/INTERFACE 之外的 PRIVATE 语义
+# 或者直接使用 target_sources(COMMON INTERFACE ...)
+target_sources(COMMON INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/Constant.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/DataStruct.hpp"
+)

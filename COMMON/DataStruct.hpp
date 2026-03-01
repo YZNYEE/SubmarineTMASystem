@@ -1,3 +1,10 @@
+#ifndef DATASTRUCT_HPP
+#define DATASTRUCT_HPP
+
+
+constexpr double M_PI = 3.14159265358979323846;
+
+
 struct ObsData{
     int timetamp;//时间戳
     double x;
@@ -16,3 +23,6 @@ struct TargetState {
     double vx;  // 速度 vx
     double vy;  // 速度 vy
 };
+
+
+#endif // !DATASTRUCT_HPP

@@ -1,7 +1,9 @@
 #pragma once
+#ifndef MLE_HPP
+#define MLE_HPP
 
 #include <vector>
-#include "COMMON/DataStruct.hpp"
+#include "DataStruct.hpp"
 
 class MLE {
 public:

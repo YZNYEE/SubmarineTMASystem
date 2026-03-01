@@ -1,0 +1,2 @@
+#ifndef DATAANALYSIS_HPP
+#define DATAANALYSIS_HPP

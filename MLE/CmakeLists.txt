@@ -1,4 +1,29 @@
+set(3RD_HEADER "${TMA_3RD_PARTY_DIR}/ceres_part/include")
+# 定义 Debug 和 Release 的库路径
+set(3RD_LIB_DEBUG "${TMA_3RD_PARTY_DIR}/ceres_part/bin/Debug")
+set(3RD_LIB_RELEASE "${TMA_3RD_PARTY_DIR}/ceres_part/bin/Release")
+
 add_library(MLE MLE.cpp MLE.hpp)
+
+
+
 target_include_directories(MLE PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # 链接 COMMON 库，使得 MLE 可以使用其中的 Constant.hpp
 target_link_libraries(MLE PUBLIC COMMON)
+target_compile_definitions(MLE PRIVATE GOOGLE_GLOG_DLL_DECL= "GLOG_NO_EXPORT=" GLOG_NO_ABBREVIATED_SEVERITIES)
+target_include_directories(MLE PUBLIC ${3RD_HEADER})
+
+# 添加链接查询目录 (同时包含 Debug 和 Release)
+target_link_directories(MLE PUBLIC 
+    ${3RD_LIB_DEBUG}
+    ${3RD_LIB_RELEASE}
+)
+
+# 使用 debug/optimized 关键字自动选择对应配置的库
+# 这样在 VS 中切换 Debug/Release 时会自动链接正确的库文件
+target_link_libraries(MLE PUBLIC 
+    debug ceres-debug debug glogd debug gflags_debug
+    optimized ceres optimized glog optimized gflags
+)
+
+

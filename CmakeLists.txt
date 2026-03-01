@@ -21,8 +21,12 @@ add_subdirectory(PF)
 add_subdirectory(UKF)
 
 # 创建可执行文件
-add_executable(TMA main.cpp)
+# 为了避免与项目名称(TMA)冲突导致在 IDE 中显示混乱，将目标名称改为 TMA_App
+add_executable(TMA_App main.cpp)
+
+# 设置输出文件名为 TMA (即生成 TMA.exe)
+set_target_properties(TMA_App PROPERTIES OUTPUT_NAME "TMA")
 
 # 将子项目的库链接到主程序
 # 注意：UKF 目前作为 INTERFACE 库链接，因为没有源文件
-target_link_libraries(TMA PRIVATE EKELUND MLE PF UKF)
+target_link_libraries(TMA_App PRIVATE EKELUND MLE PF UKF)
