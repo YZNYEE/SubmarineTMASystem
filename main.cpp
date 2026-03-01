@@ -394,7 +394,7 @@ void test_UKF() {
     init_P(3, 3) = 50.0 * 50.0;
 
     double std_a = 0.05; // Process noise (acceleration)
-    double std_rad = 0.5 * M_PI / 180.0; // Measurement noise (0.5 deg)
+    double std_rad = 0.1 * M_PI / 180.0; // Measurement noise (0.5 deg)
 
     ukf.init(init_state, init_P, std_a, std_rad);
 
@@ -462,12 +462,71 @@ void test_UKF() {
     }
 }
 
+void test_UKF_Optimized() {
+    std::cout << "\n=======================================" << std::endl;
+    std::cout << "Starting TMA UKF Optimization Test..." << std::endl;
+    std::cout << "Comparing Standard vs Low-Q (Trust Motion Model) Configuration" << std::endl;
+    std::cout << "=======================================" << std::endl;
+
+    TargetState true_target = {5000.0, 8000.0, -10.0, -5.0};
+    
+    // Generate Data
+    std::vector<ObsData> all_obs;
+    double obs_x = 0.0, obs_y = 0.0, obs_vx = 10.0, obs_vy = 0.0;
+    std::default_random_engine gen;
+    double std_rad = 0.1 * M_PI / 180.0;
+    std::normal_distribution<double> noise(0.0, std_rad);
+    
+    for (int i = 0; i <= 1200; ++i) {
+        double t = i;
+        if (i == 600) { obs_vx = 0.0; obs_vy = 10.0; } // Maneuver
+        if (i > 0) { obs_x += obs_vx; obs_y += obs_vy; }
+        
+        double tx = true_target.x + true_target.vx * t;
+        double ty = true_target.y + true_target.vy * t;
+        double b = NormalizeAngle(std::atan2(tx - obs_x, ty - obs_y) + noise(gen));
+        
+        all_obs.push_back({(int)t, obs_x, obs_y, 0.0, false, b, true});
+    }
+
+    // Define a helper to run UKF
+    auto run_ukf = [&](double std_a, const std::string& name) {
+        std::cout << "\n--- Running " << name << " (std_a=" << std_a << ") ---" << std::endl;
+        UKF ukf;
+        TargetState init_state = {6000.0, 7000.0, 0.0, 0.0}; // Same bad guess
+        Eigen::Matrix4d init_P = Eigen::Matrix4d::Identity();
+        init_P(0,0) = init_P(1,1) = 2000*2000;
+        init_P(2,2) = init_P(3,3) = 50*50;
+        
+        ukf.init(init_state, init_P, std_a, std_rad);
+        
+        for (const auto& obs : all_obs) {
+            ukf.update(obs);
+        }
+        
+        TargetState est = ukf.getResult();
+        double t = all_obs.back().timetamp;
+        double tx = true_target.x + true_target.vx * t;
+        double ty = true_target.y + true_target.vy * t;
+        double pos_err = std::sqrt(std::pow(est.x - tx, 2) + std::pow(est.y - ty, 2));
+        double vel_err = std::sqrt(std::pow(est.vx - true_target.vx, 2) + std::pow(est.vy - true_target.vy, 2));
+        
+        std::cout << "Final Result at t=" << t << "s:" << std::endl;
+        std::cout << "  Pos Error: " << pos_err << " m" << std::endl;
+        std::cout << "  Vel Error: " << vel_err << " m/s" << std::endl;
+    };
+
+    run_ukf(0.05, "Standard UKF");
+    run_ukf(0.001, "Low-Q UKF (Optimized)");
+}
+
 int main() {
     // 运行 Ekelund 测试
     // test_EKELUND();
 
     // 运行 UKF 测试
-    test_UKF();
+    // test_UKF();
+    test_UKF_Optimized();
 
     // 运行 MLE 测试
     // test_MLE(); 
