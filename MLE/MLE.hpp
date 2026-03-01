@@ -25,3 +25,5 @@ public:
 private:
     std::vector<ObsData> observations_;
 };
+
+#endif

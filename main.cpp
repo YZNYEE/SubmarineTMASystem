@@ -44,7 +44,7 @@ int main() {
 
     // 随机数生成器 (用于添加噪声)
     std::default_random_engine generator;
-    std::normal_distribution<double> noise(0.0, 0.005); // 标准差 0.005 弧度 (~0.3度)，稍微减小噪声以便观察收敛
+    std::normal_distribution<double> noise(0.0, 3.0/M_PI); // 标准差 0.005 弧度 (~0.3度)，稍微减小噪声以便观察收敛
 
     std::cout << "Generating observations..." << std::endl;
     std::cout << "  Observer Velocity (0-" << maneuver_step << "s): (" << obs_vx << ", " << obs_vy << ")" << std::endl;
