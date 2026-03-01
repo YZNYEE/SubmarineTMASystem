@@ -5,6 +5,7 @@
 #include <iomanip>
 
 #include "MLE/MLE.hpp"
+#include "PF/PF.hpp"
 #include "COMMON/DataStruct.hpp"
 
 // 辅助函数：角度归一化
@@ -14,8 +15,120 @@ double NormalizeAngle(double angle) {
     return angle;
 }
 
-int main() {
-    std::cout << "Starting TMA MLE Test..." << std::endl;
+void test_PF()
+{
+    std::cout << "\n=======================================" << std::endl;
+    std::cout << "Starting TMA PF (Particle Filter) Test..." << std::endl;
+    std::cout << "=======================================" << std::endl;
+
+    // 1. 设置真实目标状态 (Ground Truth)
+    TargetState true_target;
+    true_target.x = 5000.0;
+    true_target.y = 8000.0;
+    true_target.vx = -10.0;
+    true_target.vy = -5.0;
+
+    std::cout << "True Target State:" << std::endl;
+    std::cout << "  Pos: (" << true_target.x << ", " << true_target.y << ")" << std::endl;
+    std::cout << "  Vel: (" << true_target.vx << ", " << true_target.vy << ")" << std::endl;
+
+    // 2. 初始化 PF 滤波器
+    int num_particles = 20000;
+    ParticleFilter pf(num_particles);
+    
+    // 3. 模拟观测过程
+    double obs_x = 0.0;
+    double obs_y = 0.0;
+    double obs_vx = 10.0; // 观测者初始速度 (向东)
+    double obs_vy = 0.0;
+
+    int num_steps = 1200;     // 总观测时长
+    int maneuver_step = 600; // 在第 150 秒进行机动
+    double dt = 1.0;         // 采样间隔 1 秒
+    
+    // 测向误差标准差 (0.5度)
+    double bearing_std = 0.5 * M_PI / 180.0;
+    std::default_random_engine generator;
+    std::normal_distribution<double> noise(0.0, bearing_std);
+
+    std::cout << "Simulation Start..." << std::endl;
+
+    for (int i = 0; i < num_steps; ++i) {
+        double current_time = i * dt;
+
+        // --- 3.1 观测者运动 (含机动) ---
+        if (i == maneuver_step) {
+            std::cout << "  [Maneuver] Observer turns North at t=" << current_time << "s" << std::endl;
+            obs_vx = 0.0;
+            obs_vy = 10.0; // 改为向北运动
+        }
+        obs_x += obs_vx * dt;
+        obs_y += obs_vy * dt;
+
+        // --- 3.2 目标真实位置 ---
+        double tgt_x_curr = true_target.x + true_target.vx * current_time;
+        double tgt_y_curr = true_target.y + true_target.vy * current_time;
+
+        // --- 3.3 生成观测数据 ---
+        // 真实方位角 (正北为0，顺时针增加 -> atan2(dx, dy))
+        double true_bearing = std::atan2(tgt_x_curr - obs_x, tgt_y_curr - obs_y);
+        double meas_bearing = NormalizeAngle(true_bearing + noise(generator));
+
+        ObsData obs;
+        obs.timetamp = (int)current_time;
+        obs.x = obs_x;
+        obs.y = obs_y;
+        obs.bearing = meas_bearing;
+        obs.brgvalid = true;
+
+        // --- 3.4 粒子滤波处理 ---
+        if (!pf.isInitialized()) {
+            // 初始化：需要给定大致的先验范围
+            // 假设我们知道目标大概在 1km-20km 范围内，速度在 0-30m/s 之间
+            pf.initialize(obs, 
+                          1000.0, 20000.0,  // 距离范围
+                          0.0, 20.0,        // 速度范围
+                          -M_PI, M_PI,      // 航向范围 (全向)
+                          bearing_std);     // 测向误差
+            std::cout << "  [PF] Initialized with " << num_particles << " particles." << std::endl;
+        } else {
+            // 预测
+            pf.predict(dt, 5.0, 1.0); // 过程噪声：位置误差5m，速度误差1m/s
+            
+            // 更新
+            pf.update(obs, bearing_std);
+            
+            // 重采样
+            pf.resample();
+        }
+
+        // --- 3.5 输出每隔一定步数的估计结果 ---
+        if (i % 30 == 0 || i == num_steps - 1) {
+            TargetState est = pf.getEstimate();
+            double pos_err = std::sqrt(std::pow(est.x - tgt_x_curr, 2) + std::pow(est.y - tgt_y_curr, 2));
+            double vel_err = std::sqrt(std::pow(est.vx - true_target.vx, 2) + std::pow(est.vy - true_target.vy, 2));
+            
+            std::cout << "  t=" << std::setw(3) << i << "s | "
+                      << "Est Pos: (" << std::fixed << std::setprecision(1) << est.x << ", " << est.y << ") "
+                      << "Err: " << std::setprecision(1) << pos_err << "m | "
+                      << "Vel Err: " << std::setprecision(2) << vel_err << "m/s" << std::endl;
+        }
+    }
+
+    TargetState final_est = pf.getEstimate();
+    std::cout << "=======================================" << std::endl;
+    std::cout << "Final Estimation:" << std::endl;
+    std::cout << "  True Pos: (" << true_target.x + true_target.vx * num_steps * dt << ", " 
+              << true_target.y + true_target.vy * num_steps * dt << ")" << std::endl;
+    std::cout << "  Est  Pos: (" << final_est.x << ", " << final_est.y << ")" << std::endl;
+    std::cout << "  True Vel: (" << true_target.vx << ", " << true_target.vy << ")" << std::endl;
+    std::cout << "  Est  Vel: (" << final_est.vx << ", " << final_est.vy << ")" << std::endl;
+    std::cout << "=======================================" << std::endl;
+}
+
+void test_MLE()
+{
+        std::cout << "Starting TMA MLE Test..." << std::endl;
 
     // 1. 设置真实目标状态 (Ground Truth)
     TargetState true_target;
@@ -126,6 +239,15 @@ int main() {
     } else {
         std::cout << "\nEstimation Failed!" << std::endl;
     }
+
+}
+
+int main() {
+    // 运行 MLE 测试
+    // test_MLE(); // 假设原来的测试函数改名为 test_MLE，或者我们直接注释掉它只跑 PF
+
+    // 运行 PF 测试
+    test_PF();
 
     return 0;
 }
