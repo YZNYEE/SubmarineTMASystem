@@ -6,6 +6,7 @@
 
 #include "MLE/MLE.hpp"
 #include "PF/PF.hpp"
+#include "EKELUND/EKELUND.hpp"
 #include "COMMON/DataStruct.hpp"
 #include "PreProcess/DataManager.hpp" // 引入 DataManager
 
@@ -281,12 +282,96 @@ void test_MLE()
 
 }
 
+void test_EKELUND() {
+    std::cout << "\n=======================================" << std::endl;
+    std::cout << "Starting TMA Ekelund Test..." << std::endl;
+    std::cout << "=======================================" << std::endl;
+
+    // Ground Truth
+    TargetState true_target;
+    true_target.x = 5000.0;
+    true_target.y = 8000.0;
+    true_target.vx = -10.0;
+    true_target.vy = -5.0;
+    
+    // Observer
+    double obs_x = 0.0, obs_y = 0.0;
+    double obs_vx = 10.0, obs_vy = 0.0;
+
+    std::vector<ObsData> leg1, leg2;
+    double bearing_std = 0.1 * M_PI / 180.0; // 较小的噪声以验证算法 (0.1度)
+    std::default_random_engine gen;
+    std::normal_distribution<double> noise(0.0, bearing_std);
+
+    // Leg 1: 0-600s (East)
+    for (int i = 0; i <= 600; ++i) {
+        double t = i;
+        double tx = true_target.x + true_target.vx * t;
+        double ty = true_target.y + true_target.vy * t;
+        double ox = obs_x + obs_vx * t;
+        double oy = obs_y + obs_vy * t;
+        
+        double bearing = std::atan2(tx - ox, ty - oy);
+        ObsData obs;
+        obs.timetamp = (int)t;
+        obs.x = ox; obs.y = oy;
+        obs.bearing = NormalizeAngle(bearing + noise(gen));
+        leg1.push_back(obs);
+    }
+
+    // Maneuver at 600s
+    obs_x += obs_vx * 600;
+    obs_y += obs_vy * 600;
+    obs_vx = 0.0; obs_vy = 10.0; // Turn North
+
+    // Leg 2: 600-1200s (North)
+    for (int i = 601; i <= 1200; ++i) {
+        double t = i;
+        double tx = true_target.x + true_target.vx * t;
+        double ty = true_target.y + true_target.vy * t;
+        // Observer position relative to maneuver point
+        double ox = obs_x + obs_vx * (t - 600);
+        double oy = obs_y + obs_vy * (t - 600);
+        
+        double bearing = std::atan2(tx - ox, ty - oy);
+        ObsData obs;
+        obs.timetamp = (int)t;
+        obs.x = ox; obs.y = oy;
+        obs.bearing = NormalizeAngle(bearing + noise(gen));
+        leg2.push_back(obs);
+    }
+
+    TargetState result;
+    if (Ekelund::estimate(leg1, leg2, result)) {
+        std::cout << "Ekelund Estimate Success!" << std::endl;
+        // Evaluate at maneuver time t=600.5
+        double t_m = (leg1.back().timetamp + leg2.front().timetamp) / 2.0;
+        double true_tx = true_target.x + true_target.vx * t_m;
+        double true_ty = true_target.y + true_target.vy * t_m;
+        
+        std::cout << "Maneuver Time: " << t_m << "s" << std::endl;
+        std::cout << "True Pos: (" << true_tx << ", " << true_ty << ")" << std::endl;
+        std::cout << "Est  Pos: (" << result.x << ", " << result.y << ")" << std::endl;
+        
+        double err = std::sqrt(std::pow(result.x - true_tx, 2) + std::pow(result.y - true_ty, 2));
+        std::cout << "Position Error: " << err << " m" << std::endl;
+
+        std::cout << "True Vel: (" << true_target.vx << ", " << true_target.vy << ")" << std::endl;
+        std::cout << "Est  Vel: (" << result.vx << ", " << result.vy << ")" << std::endl;
+    } else {
+        std::cout << "Ekelund Estimate Failed!" << std::endl;
+    }
+}
+
 int main() {
+    // 运行 Ekelund 测试
+    test_EKELUND();
+
     // 运行 MLE 测试
-    // test_MLE(); // 假设原来的测试函数改名为 test_MLE，或者我们直接注释掉它只跑 PF
+    // test_MLE(); 
 
     // 运行 PF 测试
-    test_PF();
+    // test_PF();
 
     return 0;
 }
