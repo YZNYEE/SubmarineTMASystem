@@ -71,9 +71,34 @@ graph LR
 
 ### 1. 配置第三方库路径
 
-如果你的第三方库未安装在系统标准路径下，可以通过设置 `TMA_3RD_PARTY_DIR` 变量来指定查找路径，或者设置标准的 `Ceres_DIR` 和 `Eigen3_DIR`。
+#### Windows 平台
+本项目默认的第三方库目录结构如下，请确保你的 `3rdparty` 目录结构与此一致，否则请修改 CMake 文件：
 
-默认情况下，项目会在 `${CMAKE_SOURCE_DIR}/3rdparty` 下查找库。
+```text
+TMA/
+└── 3rdparty/
+    ├── ceres_part/
+    │   ├── bin/
+    │   │   ├── Debug/
+    │   │   │   ├── ceres-debug.lib
+    │   │   │   ├── gflags_debug.lib
+    │   │   │   └── glogd.lib
+    │   │   └── Release/
+    │   │       ├── ceres.lib
+    │   │       ├── gflags.lib
+    │   │       └── glog.lib
+    │   └── include/
+    │       ├── ceres/
+    │       ├── gflags/
+    │       └── glog/
+    └── eigen-3.4.0/
+```
+
+如果你的库路径不同，可以通过设置 `TMA_3RD_PARTY_DIR` 变量来指定查找路径。
+
+#### Linux 平台
+Linux 用户通常通过包管理器安装库（如 `apt install libceres-dev libeigen3-dev`）。
+你需要自行修改 `CMakeLists.txt`，移除 Windows 特定的库路径设置，改用标准的 `find_package(Ceres)` 和 `find_package(Eigen3)`。
 
 ### 2. 编译步骤
 
@@ -86,4 +111,8 @@ cmake --build .
 
 ## 使用示例
 
-编译成功后，将生成 `TMA` 可执行文件。你可以运行该程序来验证各模块的功能。
+
+## 许可证
+
+本项目采用 [MIT License](LICENSE) 开源许可证。
+您可以自由地使用、修改和分发本项目代码，但需保留原作者版权声明。
