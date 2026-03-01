@@ -1,0 +1,11 @@
+add_library(PreProcess 
+    PreProcess.cpp 
+    PreProcess.hpp
+    DataManager.cpp
+    DataManager.hpp
+)
+
+target_include_directories(PreProcess PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+# 链接 COMMON 库以访问 DataStruct.hpp
+target_link_libraries(PreProcess PUBLIC COMMON)

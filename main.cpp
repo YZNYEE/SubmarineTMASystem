@@ -7,6 +7,7 @@
 #include "MLE/MLE.hpp"
 #include "PF/PF.hpp"
 #include "COMMON/DataStruct.hpp"
+#include "PreProcess/DataManager.hpp" // 引入 DataManager
 
 // 辅助函数：角度归一化
 double NormalizeAngle(double angle) {
@@ -18,7 +19,7 @@ double NormalizeAngle(double angle) {
 void test_PF()
 {
     std::cout << "\n=======================================" << std::endl;
-    std::cout << "Starting TMA PF (Particle Filter) Test..." << std::endl;
+    std::cout << "Starting TMA PF (Particle Filter) Test with DataManager..." << std::endl;
     std::cout << "=======================================" << std::endl;
 
     // 1. 设置真实目标状态 (Ground Truth)
@@ -36,14 +37,20 @@ void test_PF()
     int num_particles = 20000;
     ParticleFilter pf(num_particles);
     
-    // 3. 模拟观测过程
+    // 3. 初始化数据管理器
+    DataManager dm;
+    // 启用异常值检测：窗口大小5，阈值0.1弧度(~5.7度)
+    dm.enableOutlierFilter(true, 5, 0.1);
+    std::cout << "DataManager initialized. Outlier filter enabled (window=5, threshold=0.1 rad)." << std::endl;
+
+    // 4. 模拟观测过程
     double obs_x = 0.0;
     double obs_y = 0.0;
     double obs_vx = 10.0; // 观测者初始速度 (向东)
     double obs_vy = 0.0;
 
     int num_steps = 1200;     // 总观测时长
-    int maneuver_step = 600; // 在第 150 秒进行机动
+    int maneuver_step = 600; // 在第 600 秒进行机动
     double dt = 1.0;         // 采样间隔 1 秒
     
     // 测向误差标准差 (0.5度)
@@ -56,7 +63,7 @@ void test_PF()
     for (int i = 0; i < num_steps; ++i) {
         double current_time = i * dt;
 
-        // --- 3.1 观测者运动 (含机动) ---
+        // --- 4.1 观测者运动 (含机动) ---
         if (i == maneuver_step) {
             std::cout << "  [Maneuver] Observer turns North at t=" << current_time << "s" << std::endl;
             obs_vx = 0.0;
@@ -65,27 +72,55 @@ void test_PF()
         obs_x += obs_vx * dt;
         obs_y += obs_vy * dt;
 
-        // --- 3.2 目标真实位置 ---
+        // --- 4.2 目标真实位置 ---
         double tgt_x_curr = true_target.x + true_target.vx * current_time;
         double tgt_y_curr = true_target.y + true_target.vy * current_time;
 
-        // --- 3.3 生成观测数据 ---
-        // 真实方位角 (正北为0，顺时针增加 -> atan2(dx, dy))
+        // --- 4.3 生成观测数据 ---
         double true_bearing = std::atan2(tgt_x_curr - obs_x, tgt_y_curr - obs_y);
         double meas_bearing = NormalizeAngle(true_bearing + noise(generator));
 
-        ObsData obs;
-        obs.timetamp = (int)current_time;
-        obs.x = obs_x;
-        obs.y = obs_y;
-        obs.bearing = meas_bearing;
-        obs.brgvalid = true;
+        ObsData raw_obs;
+        raw_obs.timetamp = (int)current_time;
+        raw_obs.x = obs_x;
+        raw_obs.y = obs_y;
+        raw_obs.bearing = meas_bearing;
+        raw_obs.brgvalid = true;
 
-        // --- 3.4 粒子滤波处理 ---
+        // --- 注入人工异常值 (每 100 步一次，模拟传感器故障) ---
+        if (i > 50 && i % 100 == 50) {
+            //raw_obs.bearing = NormalizeAngle(raw_obs.bearing + 0.5); // 增加约 28 度偏差
+            //std::cout << "  [Inject Outlier] at t=" << current_time << "s, Bearing: " << raw_obs.bearing << std::endl;
+        }
+
+        // --- 4.4 数据管理与异常剔除 ---
+        dm.addObservation(raw_obs);
+
+        // 检查数据是否被接受
+        const auto& all_obs = dm.getAllObservations();
+        bool is_accepted = false;
+        if (!all_obs.empty()) {
+            // 比较时间戳确认是否是刚添加的数据
+            if (all_obs.back().timetamp == raw_obs.timetamp) {
+                is_accepted = true;
+            }
+        }
+
+        if (!is_accepted) {
+            std::cout << "  [Outlier Rejected] at t=" << current_time << "s" << std::endl;
+            // 即使被剔除，如果有之前的状态，也可以进行纯预测
+            if (pf.isInitialized()) {
+                pf.predict(dt, 5.0, 1.0);
+            }
+            continue;
+        }
+
+        const ObsData& valid_obs = all_obs.back();
+
+        // --- 4.5 粒子滤波处理 ---
         if (!pf.isInitialized()) {
-            // 初始化：需要给定大致的先验范围
-            // 假设我们知道目标大概在 1km-20km 范围内，速度在 0-30m/s 之间
-            pf.initialize(obs, 
+            // 初始化
+            pf.initialize(valid_obs, 
                           1000.0, 20000.0,  // 距离范围
                           0.0, 20.0,        // 速度范围
                           -M_PI, M_PI,      // 航向范围 (全向)
@@ -93,16 +128,20 @@ void test_PF()
             std::cout << "  [PF] Initialized with " << num_particles << " particles." << std::endl;
         } else {
             // 预测
-            pf.predict(dt, 5.0, 1.0); // 过程噪声：位置误差5m，速度误差1m/s
+            // 降低过程噪声：
+            // 位置噪声：1.0m (考虑到离散化误差和微小扰动)
+            // 速度噪声：0.05m/s (目标假设为近似匀速，允许少量机动或扰动)
+            // 原来的 1.0m/s 速度噪声对于 CV 模型来说太大，导致粒子发散
+            pf.predict(dt, 1.0, 0.05); 
             
             // 更新
-            pf.update(obs, bearing_std);
+            pf.update(valid_obs, bearing_std);
             
             // 重采样
             pf.resample();
         }
 
-        // --- 3.5 输出每隔一定步数的估计结果 ---
+        // --- 4.6 输出每隔一定步数的估计结果 ---
         if (i % 30 == 0 || i == num_steps - 1) {
             TargetState est = pf.getEstimate();
             double pos_err = std::sqrt(std::pow(est.x - tgt_x_curr, 2) + std::pow(est.y - tgt_y_curr, 2));

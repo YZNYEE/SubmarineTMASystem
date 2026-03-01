@@ -19,6 +19,7 @@ add_subdirectory(EKELUND)
 add_subdirectory(MLE)
 add_subdirectory(PF)
 add_subdirectory(UKF)
+add_subdirectory(PreProcess)
 
 # 创建可执行文件
 # 为了避免与项目名称(TMA)冲突导致在 IDE 中显示混乱，将目标名称改为 TMA_App
@@ -29,4 +30,4 @@ set_target_properties(TMA_App PROPERTIES OUTPUT_NAME "TMA")
 
 # 将子项目的库链接到主程序
 # 注意：UKF 目前作为 INTERFACE 库链接，因为没有源文件
-target_link_libraries(TMA_App PRIVATE EKELUND MLE PF UKF)
+target_link_libraries(TMA_App PRIVATE EKELUND MLE PF UKF PreProcess)
