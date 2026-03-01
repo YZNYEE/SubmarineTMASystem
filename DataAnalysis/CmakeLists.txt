@@ -1,0 +1,15 @@
+add_library(DataAnalysis
+    DataAnalysis.cpp
+    DataAnalysis.hpp
+)
+
+target_include_directories(DataAnalysis PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Include Eigen headers
+set(3RD_HEADER "${TMA_3RD_PARTY_DIR}/ceres_part/include")
+target_include_directories(DataAnalysis PUBLIC 
+    "${3RD_HEADER}/eigen-3.4.0"
+)
+
+# 链接 COMMON 库以访问 DataStruct.hpp
+target_link_libraries(DataAnalysis PUBLIC COMMON PreProcess)

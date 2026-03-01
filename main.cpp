@@ -8,6 +8,7 @@
 #include "PF/PF.hpp"
 #include "EKELUND/EKELUND.hpp"
 #include "UKF/UKF.hpp"
+#include "DataAnalysis/DataAnalysis.hpp"
 #include "COMMON/DataStruct.hpp"
 #include "PreProcess/DataManager.hpp" // 引入 DataManager
 
@@ -134,7 +135,7 @@ void test_PF()
             // 位置噪声：1.0m (考虑到离散化误差和微小扰动)
             // 速度噪声：0.05m/s (目标假设为近似匀速，允许少量机动或扰动)
             // 原来的 1.0m/s 速度噪声对于 CV 模型来说太大，导致粒子发散
-            pf.predict(dt, 1.0, 0.05); 
+            pf.predict(dt, 0.1, 0.01); 
             
             // 更新
             pf.update(valid_obs, bearing_std);
@@ -517,22 +518,129 @@ void test_UKF_Optimized() {
     };
 
     run_ukf(0.05, "Standard UKF");
-    run_ukf(0.001, "Low-Q UKF (Optimized)");
+     run_ukf(0.001, "Low-Q UKF (Optimized)");
+ }
+
+void test_DataAnalysis() {
+    std::cout << "\n=======================================" << std::endl;
+    std::cout << "Starting Data Analysis Test..." << std::endl;
+    std::cout << "=======================================" << std::endl;
+
+    // 1. Setup Scenario
+    TargetState true_target = {5000.0, 8000.0, -10.0, -5.0};
+    std::vector<ObsData> trajectory;
+    double obs_x = 0.0, obs_y = 0.0, obs_vx = 10.0, obs_vy = 0.0;
+    
+    // Random generator for noise
+    std::default_random_engine gen;
+    std::normal_distribution<double> dist(0.0, 1.0); // Mean 0, Std 1
+    double bearing_std = 0.5 * M_PI / 180.0; // 0.5 deg
+    std::normal_distribution<double> bearing_noise(0.0, bearing_std);
+
+    // MLE Solver
+    MLE mle_solver;
+
+    // Simulate 1200s with maneuver at 600s
+    for (int i = 0; i <= 1200; ++i) {
+        if (i == 600) { obs_vx = 0.0; obs_vy = 10.0; }
+        if (i > 0) { obs_x += obs_vx; obs_y += obs_vy; }
+        
+        // Calculate true bearing
+        double tgt_x = true_target.x + true_target.vx * i;
+        double tgt_y = true_target.y + true_target.vy * i;
+        double true_bearing = std::atan2(tgt_x - obs_x, tgt_y - obs_y);
+        
+        ObsData obs;
+        obs.timetamp = i;
+        obs.x = obs_x;
+        obs.y = obs_y;
+        obs.bearing = NormalizeAngle(true_bearing + bearing_noise(gen));
+        obs.brgvalid = true;
+        
+        trajectory.push_back(obs);
+        mle_solver.addObservation(obs);
+    }
+
+    // Run MLE to get estimated state
+    TargetState initial_guess = true_target;
+    initial_guess.x += 1000.0; // Perturb initial guess
+    initial_guess.y += 1000.0;
+    initial_guess.vx = 0.0;
+    initial_guess.vy = 0.0;
+    
+    TargetState mle_result;
+    bool mle_success = mle_solver.estimate(initial_guess, mle_result);
+    
+    if (mle_success) {
+        std::cout << "MLE Estimation Success:" << std::endl;
+        std::cout << "  Est Pos: (" << mle_result.x << ", " << mle_result.y << ")" << std::endl;
+        std::cout << "  Est Vel: (" << mle_result.vx << ", " << mle_result.vy << ")" << std::endl;
+    } else {
+        std::cout << "MLE Estimation Failed! Using True Target for CRLB." << std::endl;
+        mle_result = true_target;
+    }
+
+    // 2. CRLB Calculation (Using MLE Result as Input)
+    // double bearing_std = 0.5 * M_PI / 180.0; // Already defined above
+    Eigen::MatrixXd crlb = DataAnalysis::CalculateCRLB(trajectory, mle_result, bearing_std);
+    
+    std::cout << "CRLB Matrix (Diagonal Sqrt) at MLE Estimate:" << std::endl;
+    std::cout << "  Pos X std: " << std::sqrt(crlb(0,0)) << " m" << std::endl;
+    std::cout << "  Pos Y std: " << std::sqrt(crlb(1,1)) << " m" << std::endl;
+    std::cout << "  Vel X std: " << std::sqrt(crlb(2,2)) << " m/s" << std::endl;
+    std::cout << "  Vel Y std: " << std::sqrt(crlb(3,3)) << " m/s" << std::endl;
+
+    // 3. Error Ellipse
+    DataAnalysis::EllipseParams ellipse = DataAnalysis::CalculateErrorEllipse(crlb.block<2,2>(0,0), 0.95);
+    std::cout << "\nError Ellipse (95%):" << std::endl;
+    std::cout << "  Long Axis: " << ellipse.long_axis << " m" << std::endl;
+    std::cout << "  Short Axis: " << ellipse.short_axis << " m" << std::endl;
+    std::cout << "  Angle: " << ellipse.angle_rad * 180.0 / M_PI << " deg" << std::endl;
+
+    // 4. Residual Analysis (Simulated)
+    std::vector<double> residuals;
+    // std::default_random_engine gen; // Already defined
+    // std::normal_distribution<double> dist(0.0, 1.0); // Already defined
+    for(int i=0; i<100; ++i) residuals.push_back(dist(gen));
+    
+    DataAnalysis::ResidualStats res_stats = DataAnalysis::AnalyzeResiduals(residuals);
+    std::cout << "\nResidual Analysis (Simulated Gaussian N(0,1)):" << std::endl;
+    std::cout << "  Mean: " << res_stats.mean << std::endl;
+    std::cout << "  Std Dev: " << res_stats.std_dev << std::endl;
+
+    // 5. Monte Carlo Stats (Simulated)
+    std::vector<TargetState> mc_results;
+    for(int i=0; i<50; ++i) {
+        TargetState t = true_target;
+        t.x += dist(gen) * 10.0; // Add 10m noise
+        t.y += dist(gen) * 10.0;
+        t.vx += dist(gen) * 1.0;
+        t.vy += dist(gen) * 1.0;
+        mc_results.push_back(t);
+    }
+    
+    DataAnalysis::MonteCarloStats mc_stats = DataAnalysis::AnalyzeMonteCarlo(mc_results, true_target);
+    std::cout << "\nMonte Carlo Stats (Simulated):" << std::endl;
+    std::cout << "  Pos RMSE: " << mc_stats.pos_rmse << " m" << std::endl;
+    std::cout << "  CEP50: " << mc_stats.cep50 << " m" << std::endl;
 }
 
-int main() {
+ int main() {
     // 运行 Ekelund 测试
     // test_EKELUND();
 
     // 运行 UKF 测试
     // test_UKF();
-    test_UKF_Optimized();
+    //test_UKF_Optimized();
 
     // 运行 MLE 测试
     // test_MLE(); 
 
     // 运行 PF 测试
     // test_PF();
+
+    // 运行 Data Analysis 测试
+    test_DataAnalysis();
 
     return 0;
 }
