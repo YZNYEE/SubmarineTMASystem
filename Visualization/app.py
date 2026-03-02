@@ -2,7 +2,8 @@ import sys
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QHBoxLayout, QDockWidget, QStatusBar, QToolBar,
                                QLabel, QPushButton, QGroupBox, QFormLayout, 
-                               QLineEdit, QComboBox, QCheckBox, QTabWidget)
+                               QLineEdit, QComboBox, QCheckBox, QTabWidget,
+                               QSlider, QDial)
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QIcon
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -271,18 +272,52 @@ class MainWindow(QMainWindow):
         dock_content = QWidget()
         dock_layout = QVBoxLayout(dock_content)
         
-        # 1. Observer Settings Group
-        obs_group = QGroupBox("Observer State")
-        obs_layout = QFormLayout()
-        self.input_obs_speed = QLineEdit("10.0")
-        self.input_obs_heading = QLineEdit("0.0")
-        obs_layout.addRow("Speed (m/s):", self.input_obs_speed)
-        obs_layout.addRow("Heading (deg):", self.input_obs_heading)
+        # 1. Observer Settings Group (Real-time Control)
+        obs_group = QGroupBox("Observer Control (Real-time)")
+        obs_layout = QVBoxLayout()
+        
+        # Speed Control
+        speed_layout = QHBoxLayout()
+        speed_label = QLabel("Speed (m/s):")
+        self.slider_obs_speed = QSlider(Qt.Horizontal)
+        self.slider_obs_speed.setRange(0, 50) # 0-50 m/s
+        self.slider_obs_speed.setValue(10)
+        self.input_obs_speed = QLineEdit("10")
+        self.input_obs_speed.setFixedWidth(40)
+        self.input_obs_speed.setReadOnly(True) # Read-only, control via slider
+        
+        speed_layout.addWidget(speed_label)
+        speed_layout.addWidget(self.slider_obs_speed)
+        speed_layout.addWidget(self.input_obs_speed)
+        obs_layout.addLayout(speed_layout)
+        
+        # Heading Control (Using Dial for intuitive rotation)
+        heading_layout = QHBoxLayout()
+        heading_label = QLabel("Heading (deg):")
+        self.dial_obs_heading = QDial()
+        self.dial_obs_heading.setRange(0, 359)
+        self.dial_obs_heading.setValue(0)
+        self.dial_obs_heading.setNotchesVisible(True)
+        self.dial_obs_heading.setWrapping(True) # Allow 359 -> 0 transition
+        
+        self.input_obs_heading = QLineEdit("0")
+        self.input_obs_heading.setFixedWidth(40)
+        self.input_obs_heading.setReadOnly(True)
+        
+        heading_layout.addWidget(heading_label)
+        heading_layout.addWidget(self.dial_obs_heading)
+        heading_layout.addWidget(self.input_obs_heading)
+        obs_layout.addLayout(heading_layout)
+        
+        # Connect signals
+        self.slider_obs_speed.valueChanged.connect(self.update_observer_speed)
+        self.dial_obs_heading.valueChanged.connect(self.update_observer_heading)
+        
         obs_group.setLayout(obs_layout)
         dock_layout.addWidget(obs_group)
         
         # 2. Target Settings Group
-        target_group = QGroupBox("Target State")
+        target_group = QGroupBox("Target State (Initial)")
         target_layout = QFormLayout()
         self.input_tgt_x = QLineEdit("5000.0")
         self.input_tgt_y = QLineEdit("5000.0")
@@ -310,10 +345,10 @@ class MainWindow(QMainWindow):
         algo_group.setLayout(algo_layout)
         dock_layout.addWidget(algo_group)
         
-        # 4. Action Buttons
+        # 4. Action Buttons (Mainly for Target Reset/Apply)
         btn_layout = QHBoxLayout()
-        self.btn_apply = QPushButton("Apply")
-        self.btn_reset = QPushButton("Reset")
+        self.btn_apply = QPushButton("Apply Target")
+        self.btn_reset = QPushButton("Reset All")
         btn_layout.addWidget(self.btn_apply)
         btn_layout.addWidget(self.btn_reset)
         dock_layout.addLayout(btn_layout)
@@ -334,22 +369,28 @@ class MainWindow(QMainWindow):
         self.log_dock.setWidget(self.log_widget)
         self.addDockWidget(Qt.BottomDockWidgetArea, self.log_dock)
 
+    def update_observer_speed(self, value):
+        """Real-time update for observer speed"""
+        self.input_obs_speed.setText(str(value))
+        self.tab_trajectory.observer.speed = float(value)
+        # Immediate visual feedback (optional, maybe too heavy if dragged fast, but for simple plot it's fine)
+        # self.tab_trajectory.setup_plot() 
+
+    def update_observer_heading(self, value):
+        """Real-time update for observer heading"""
+        self.input_obs_heading.setText(str(value))
+        self.tab_trajectory.observer.heading = float(value)
+        # Immediate visual feedback: rotate the wedge even if paused
+        self.tab_trajectory.setup_plot()
+
     def apply_settings(self):
-        """Apply the configuration from the dock to the simulation/visualization"""
+        """Apply the configuration (Target mainly)"""
         try:
-            # Observer
-            obs_speed = float(self.input_obs_speed.text())
-            obs_heading = float(self.input_obs_heading.text())
-            
-            # Target
+            # Target (Apply only when button clicked)
             tgt_x = float(self.input_tgt_x.text())
             tgt_y = float(self.input_tgt_y.text())
             tgt_speed = float(self.input_tgt_speed.text())
             tgt_heading = float(self.input_tgt_heading.text())
-            
-            # Update Trajectory View
-            self.tab_trajectory.observer.speed = obs_speed
-            self.tab_trajectory.observer.heading = obs_heading
             
             self.tab_trajectory.target.x = tgt_x
             self.tab_trajectory.target.y = tgt_y
@@ -359,19 +400,23 @@ class MainWindow(QMainWindow):
             # Redraw
             self.tab_trajectory.setup_plot()
             
-            self.status_bar.showMessage("Settings Applied Successfully", 3000)
+            self.status_bar.showMessage("Target Settings Applied Successfully", 3000)
             
         except ValueError:
-            self.status_bar.showMessage("Error: Invalid input values. Please check numbers.", 5000)
+            self.status_bar.showMessage("Error: Invalid input values.", 5000)
 
     def reset_settings(self):
         """Reset to default values"""
-        self.input_obs_speed.setText("10.0")
-        self.input_obs_heading.setText("0.0")
+        # Reset Observer Controls
+        self.slider_obs_speed.setValue(10)
+        self.dial_obs_heading.setValue(0)
+        
+        # Reset Target Inputs
         self.input_tgt_x.setText("5000.0")
         self.input_tgt_y.setText("5000.0")
         self.input_tgt_speed.setText("15.0")
         self.input_tgt_heading.setText("270.0")
+        
         self.apply_settings()
 
 if __name__ == "__main__":

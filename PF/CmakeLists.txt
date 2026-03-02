@@ -2,3 +2,38 @@ add_library(PF PF.cpp PF.hpp)
 target_include_directories(PF PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # 链接 COMMON 库，使得 PF 可以使用其中的 Constant.hpp
 target_link_libraries(PF PUBLIC COMMON)
+
+# --- Python Bindings using pybind11 ---
+
+include(FetchContent)
+
+FetchContent_Declare(
+  pybind11
+  GIT_REPOSITORY https://github.com/pybind/pybind11.git
+  GIT_TAG        v2.13.6
+)
+
+# Check if pybind11 is already populated to avoid re-fetching or conflicts
+FetchContent_GetProperties(pybind11)
+if(NOT pybind11_POPULATED)
+  FetchContent_Populate(pybind11)
+  add_subdirectory(${pybind11_SOURCE_DIR} ${pybind11_BINARY_DIR})
+endif()
+
+# Only build python module if pybind11 is available
+if(TARGET pybind11::module)
+    pybind11_add_module(PF_py PF_py.cpp)
+    
+    # Link to the PF library and COMMON
+    target_link_libraries(PF_py PRIVATE PF COMMON)
+    
+    # Set output name (default extension will be handled by pybind11, e.g. .pyd on Windows)
+    set_target_properties(PF_py PROPERTIES OUTPUT_NAME "PF_py")
+    
+    # Copy the generated module to the Visualization directory for easy import
+    add_custom_command(TARGET PF_py POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:PF_py>
+        ${CMAKE_SOURCE_DIR}/Visualization/$<TARGET_FILE_NAME:PF_py>
+    )
+endif()
